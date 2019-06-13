@@ -9,7 +9,9 @@ else
 fi
 
 tester_dir="$(dirname "$0")"
-random_dir=$tester_dir/.random_test
+random_dir_old=$tester_dir/.random_test
+rm -rf $random_dir_old
+random_dir=$tester_dir/random_test
 mkdir -p $random_dir
 
 source $tester_dir"/util.sh"
@@ -139,7 +141,7 @@ random_test () {
 	trap "exit" INT TERM ERR
 	trap "kill 0" EXIT
 
-	# rm -rf $random_dir/*
+	rm -rf $random_dir/*
 
 	IFS=$'\n'
 
