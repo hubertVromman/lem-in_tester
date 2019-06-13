@@ -6,6 +6,9 @@ mkdir -p $tmp_dir
 
 input_copied () {
 	nb_lines=`wc -l < $1`
+	if ((nb_lines == 0));then
+		return
+	fi
 	head -n $nb_lines $2 > $tmp_dir/start_of_sol_file$3
 	diff "$tmp_dir/start_of_sol_file$3" $1 >/dev/null 2>&1
 	if (( $? != 0 )); then

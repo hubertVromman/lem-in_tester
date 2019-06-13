@@ -41,62 +41,75 @@ single_test () {
 	start=`grep -A 1 "^##start$" $current_map | sed "s/##start//" | tr -d '\n' | cut -d' ' -f1`
 	end=`grep -A 1 "^##end$" $current_map | sed "s/##end//" | tr -d '\n' | cut -d' ' -f1`
 
-	declare -a pos_ant=()
-	for (( i = 0; i < nb_ants; i++ )); do
-		pos_ant+=($start)
-	done
+	if [[ -z $start || -z $end ]];then
+		echo "no start or end room" >> $current_result
+	else
 
-	paths=""
-	i=0
-	declare -i id_ant
-	# echo $start
-	for line in `grep -E "^L" $current_sol`; do
-		# echo line $i
-		IFS=" L"
-		for move in `echo $line`; do
-			id_ant=move-1
-			next_room=${move##*-}
-			# echo $paths | grep -m 1 "${pos_ant[$id_ant]} $next_room"
-			if [[ $paths != *"${pos_ant[$id_ant]} $next_room"* ]]; then
-				if [[ $current_map_links == *"${pos_ant[$id_ant]}-$next_room"* || $current_map_links == *"$next_room-${pos_ant[$id_ant]}"* ]]; then
-					paths+="${pos_ant[$id_ant]} $next_room\n"
-				else
-					echo "$next_room and ${pos_ant[$id_ant]} are not linked" >> $current_result
-				fi
-			fi
-			pos_ant[$id_ant]=$next_room
+		declare -a pos_ant=()
+		for (( i = 0; i < nb_ants; i++ )); do
+			pos_ant+=($start)
 		done
-		IFS=$'\n'
-		all_pos=`echo "${pos_ant[@]}" | tr ' ' '\n' | sed "s/$start//g" | sed "s/$end//g"`
-		# all_pos=`echo ${pos_ant[@]} | sed "s/$start//g" | sed "s/$end//g" | tr " " "\n"`
-		nb_uniq_lines=`echo $all_pos | tr ' ' '\n' | sort -u | wc -l`
-		nb_lines=`echo $all_pos | tr ' ' '\n' | wc -l`
-		if (( nb_uniq_lines != nb_lines ));then
-			ant_idx=0
-			for pos in `echo ${pos_ant[@]} | tr ' ' '\n' | sed "s/$start//g" | sed "s/$end//g"`; do
-				# echo $pos
-				c=0
-				other_idx=0
-				for other_pos in ${pos_ant[@]}; do
-					if [[ $pos == $other_pos ]]; then
-						if (( c == 0 && other_idx != ant_idx )); then
-							let ant_idx++
-							continue
-						fi
-						let c++
-					fi
-					let other_idx++
-				done
-				if (( c > 1 )); then
-					echo "$c ants in room '$pos' at line $((i + 2 + `wc -l < $current_map`))" >> $current_result
-				fi
-				let ant_idx++
+
+		paths=""
+		i=0
+		declare -i id_ant
+		# echo $start
+		for line in `grep -E "^L" $current_sol`; do
+			# echo line $i
+			IFS=" L"
+			for ((j=0; j<nb_ants; j++)); do
+				has_moved[$j]=0
 			done
+			for move in `echo $line`; do
+				id_ant=move-1
+				next_room=${move##*-}
+				# echo $paths | grep -m 1 "${pos_ant[$id_ant]} $next_room"
+				if [[ $paths != *"${pos_ant[$id_ant]} $next_room"* ]]; then
+					if [[ $current_map_links == *"${pos_ant[$id_ant]}-$next_room"* || $current_map_links == *"$next_room-${pos_ant[$id_ant]}"* ]]; then
+						paths+="${pos_ant[$id_ant]} $next_room\n"
+					else
+						echo "$next_room and ${pos_ant[$id_ant]} are not linked on play $i" >> $current_result
+					fi
+				fi
+				pos_ant[$id_ant]=$next_room
+				if (( has_moved[$id_ant] == 1 ));then
+					echo "ant $((id_ant+1)) moved twice on play $i" >> $current_result
+				else
+					has_moved[$id_ant]=1
+				fi
+			done
+			IFS=$'\n'
+			all_pos=`echo "${pos_ant[@]}" | tr ' ' '\n' | sed "s/$start//g" | sed "s/$end//g"`
+			# all_pos=`echo ${pos_ant[@]} | sed "s/$start//g" | sed "s/$end//g" | tr " " "\n"`
+			nb_uniq_lines=`echo $all_pos | tr ' ' '\n' | sort -u | wc -l`
+			nb_lines=`echo $all_pos | tr ' ' '\n' | wc -l`
+			if (( nb_uniq_lines != nb_lines ));then
+				ant_idx=0
+				for pos in `echo ${pos_ant[@]} | tr ' ' '\n' | sed "s/$start//g" | sed "s/$end//g"`; do
+					# echo $pos
+					c=0
+					other_idx=0
+					for other_pos in ${pos_ant[@]}; do
+						if [[ $pos == $other_pos ]]; then
+							if (( c == 0 && other_idx != ant_idx )); then
+								let ant_idx++
+								continue
+							fi
+							let c++
+						fi
+						let other_idx++
+					done
+					if (( c > 1 )); then
+						echo "$c ants in room '$pos' at line $((i + 2 + `wc -l < $current_map`))" >> $current_result
+					fi
+					let ant_idx++
+				done
+			fi
+			let i++
+		done
+		if [[ -n `echo "${pos_ant[@]}" | tr ' ' '\n' | sed "s/$end//g"` ]]; then
+			echo "not all ant arrived" >> $current_result
 		fi
-		let i++
-	done
-	if [[ -n `echo "${pos_ant[@]}" | tr ' ' '\n' | sed "s/$end//g"` ]]; then
-		echo "not all ant arrived" >> $current_result
 	fi
 	if [[ -z `cat $current_result` ]]; then
 		echo "No error found !" >> $current_result
@@ -126,7 +139,7 @@ random_test () {
 	trap "exit" INT TERM ERR
 	trap "kill 0" EXIT
 
-	rm -rf $random_dir/*
+	# rm -rf $random_dir/*
 
 	IFS=$'\n'
 
@@ -150,11 +163,21 @@ random_test () {
 	grade=5
 	runtime=5
 	for file in `ls -1 $random_dir | grep "result"`; do
-		tmp=`grep seconds $random_dir/$file`
+		tmp=`grep seconds $random_dir/$file||echo`
+		if [[ -z $tmp ]];then
+			grade=0
+			runtime=0
+			break
+		fi
 		if (( ${tmp: -4:1} < grade )); then
 			grade=${tmp: -4:1}
 		fi
-		tmp=`grep generator $random_dir/$file`
+		tmp=`grep generator $random_dir/$file||echo`
+		if [[ -z $tmp ]];then
+			grade=0
+			runtime=0
+			break
+		fi
 		if (( ${tmp: -4:1} < runtime )); then
 			runtime=${tmp: -4:1}
 		fi
